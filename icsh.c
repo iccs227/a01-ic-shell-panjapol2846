@@ -9,17 +9,28 @@
 
 #define MAX_LINE 1024
 
-int main() {
+int main(int argc, char *argv[]) {
+    FILE *input = stdin;
     char line[MAX_LINE];
     char last_command[MAX_LINE] = {0};
 
-    printf("Starting IC shell\n");
+    if (argc == 2) {
+        input = fopen(argv[1], "r");
+        if (!input) {
+            perror("Failed to open script file");
+            return 1;
+        }
+    }
+
+    if (input == stdin)
+        printf("Starting IC shell\n");
 
     while (1) {
-        printf("icsh $ ");
+        if (input == stdin)
+            printf("icsh $ ");
         fflush(stdout);
 
-        if (!fgets(line, MAX_LINE, stdin)) {
+        if (!fgets(line, MAX_LINE, input)) {
             break;
         }
 
@@ -30,10 +41,11 @@ int main() {
         }
 
         if (strcmp(line, "!!") == 0) {
-            if (strlen(last_command) == 0) {
+            if (strlen(last_command) == 0)
                 continue;
+            if (input == stdin) {
+                printf("%s\n", last_command);
             }
-            printf("%s\n", last_command);
             strcpy(line, last_command);
         } else {
             strcpy(last_command, line);
@@ -49,6 +61,7 @@ int main() {
         } else if (strcmp(cmd, "exit") == 0) {
             char *arg = strtok(NULL, " ");
             int exit_code = arg ? atoi(arg) % 256 : 0;
+            if (input != stdin) fclose(input);
             printf("bye\n");
             exit(exit_code);
         } else {
@@ -56,6 +69,8 @@ int main() {
         }
     }
 
+    if (input != stdin)
+        fclose(input);
+
     return 0;
 }
-
