@@ -6,14 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 #define MAX_LINE 1024
 
 int main(int argc, char *argv[]) {
     FILE *input = stdin;
-    char line[MAX_LINE];
-    char last_command[MAX_LINE] = {0};
-
     if (argc == 2) {
         input = fopen(argv[1], "r");
         if (!input) {
@@ -21,6 +21,9 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
+
+    char line[MAX_LINE];
+    char last_command[MAX_LINE] = {0};
 
     if (input == stdin)
         printf("Starting IC shell\n");
@@ -65,7 +68,26 @@ int main(int argc, char *argv[]) {
             printf("bye\n");
             exit(exit_code);
         } else {
-            printf("bad command\n");
+            pid_t pid = fork();
+            if (pid < 0) {
+                perror("fork failed");
+                continue;
+            } else if (pid == 0) {
+                char *args[MAX_LINE / 2 + 1];
+                args[0] = cmd;
+                int i = 1;
+                char *token;
+                while ((token = strtok(NULL, " ")) != NULL) {
+                    args[i++] = token;
+                }
+                args[i] = NULL;
+                execvp(cmd, args);
+                perror("exec failed");
+                exit(1);
+            } else {
+                int status;
+                waitpid(pid, &status, 0);
+            }
         }
     }
 
