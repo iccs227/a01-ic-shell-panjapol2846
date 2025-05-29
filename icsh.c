@@ -1,6 +1,6 @@
 /* ICCS227: Project 1: icsh
- * Name:Panjapol Chayasana
- * StudentID:6580059
+ * Name: Panjapol Chayasana
+ * StudentID: 6580059
  */
 
 #include <stdio.h>
@@ -9,9 +9,25 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <signal.h>
 #include <fcntl.h>
 
 #define MAX_LINE 1024
+
+pid_t fg_pid = -1;
+int last_exit_status = 0;
+
+void handle_sigint(int sig) {
+    if (fg_pid > 0) {
+        kill(-fg_pid, SIGINT);
+    }
+}
+
+void handle_sigtstp(int sig) {
+    if (fg_pid > 0) {
+        kill(-fg_pid, SIGTSTP);
+    }
+}
 
 int main(int argc, char *argv[]) {
     FILE *input = stdin;
@@ -22,6 +38,9 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
+
+    signal(SIGINT, handle_sigint);
+    signal(SIGTSTP, handle_sigtstp);
 
     char line[MAX_LINE];
     char last_command[MAX_LINE] = {0};
@@ -60,8 +79,11 @@ int main(int argc, char *argv[]) {
 
         if (strcmp(cmd, "echo") == 0) {
             char *arg = strtok(NULL, "");
-            if (arg) printf("%s\n", arg);
+            if (arg && strcmp(arg, "$?") == 0)
+                printf("%d\n", last_exit_status);
+            else if (arg) printf("%s\n", arg);
             else printf("\n");
+            last_exit_status = 0;
         } else if (strcmp(cmd, "exit") == 0) {
             char *arg = strtok(NULL, " ");
             int exit_code = arg ? atoi(arg) % 256 : 0;
@@ -74,6 +96,8 @@ int main(int argc, char *argv[]) {
                 perror("fork failed");
                 continue;
             } else if (pid == 0) {
+                setpgid(0, 0);
+
                 char *args[MAX_LINE / 2 + 1];
                 int i = 0;
                 int redirect_in = 0, redirect_out = 0;
@@ -126,8 +150,20 @@ int main(int argc, char *argv[]) {
                 perror("exec failed");
                 exit(1);
             } else {
+                fg_pid = pid;
+                setpgid(pid, pid);
                 int status;
-                waitpid(pid, &status, 0);
+                waitpid(pid, &status, WUNTRACED);
+                if (WIFEXITED(status)) {
+                    last_exit_status = WEXITSTATUS(status);
+                } else if (WIFSIGNALED(status)) {
+                    last_exit_status = 128 + WTERMSIG(status);
+                } else if (WIFSTOPPED(status)) {
+                    last_exit_status = 128 + WSTOPSIG(status);
+                } else {
+                    last_exit_status = 1;
+                }
+                fg_pid = -1;
             }
         }
     }
@@ -137,3 +173,5 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+
